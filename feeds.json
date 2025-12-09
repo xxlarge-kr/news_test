@@ -29,6 +29,11 @@
       "name": "hada",
       "url": "http://news.hada.io/rss/news",
       "enabled": true
+    },
+    {
+      "name": "wishket",
+      "url": "https://yozm.wishket.com/magazine/feed/",
+      "enabled": true
     }
   ]
 }

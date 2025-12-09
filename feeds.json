@@ -1,11 +1,6 @@
 {
   "feeds": [
     {
-      "name": "Naver IT News",
-      "url": "https://news.naver.com/main/rss/section.naver?sid=105",
-      "enabled": true
-    },
-    {
       "name": "TechCrunch Korea",
       "url": "https://kr.techcrunch.com/feed/",
       "enabled": true

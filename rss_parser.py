@@ -6,9 +6,20 @@ import feedparser
 from datetime import datetime, timedelta
 from typing import List, Dict, Any
 import logging
+import ssl
+import urllib.request
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# SSL 인증서 검증 우회 (개발 환경용)
+# 프로덕션 환경에서는 SSL 인증서를 제대로 설정하는 것을 권장합니다
+ssl_context = ssl.create_default_context()
+ssl_context.check_hostname = False
+ssl_context.verify_mode = ssl.CERT_NONE
+
+# feedparser가 사용하는 urllib의 SSL 컨텍스트 설정
+urllib.request.ssl._create_default_https_context = lambda: ssl_context
 
 
 def parse_rss_feed(feed_url: str, max_age_hours: int = 24) -> List[Dict[str, Any]]:

@@ -13,6 +13,57 @@ from utils import (
 )
 from config import get_admin_password, get_default_feeds
 import pandas as pd
+import os
+import logging
+from logging.handlers import RotatingFileHandler
+
+# 로깅 설정
+def setup_logging():
+    """로깅 설정 초기화"""
+    logs_dir = "logs"
+    if not os.path.exists(logs_dir):
+        os.makedirs(logs_dir)
+    
+    # 로그 파일 경로
+    log_file = os.path.join(logs_dir, "app.log")
+    
+    # 로거 설정
+    logger = logging.getLogger("newsroom_app")
+    logger.setLevel(logging.DEBUG)
+    
+    # 기존 핸들러 제거 (중복 방지)
+    if logger.handlers:
+        logger.handlers.clear()
+    
+    # 파일 핸들러 (회전 로그 파일, 최대 10MB, 5개 파일 보관)
+    file_handler = RotatingFileHandler(
+        log_file,
+        maxBytes=10*1024*1024,  # 10MB
+        backupCount=5,
+        encoding='utf-8'
+    )
+    file_handler.setLevel(logging.DEBUG)
+    
+    # 콘솔 핸들러
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    
+    # 포맷터 설정
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    file_handler.setFormatter(formatter)
+    console_handler.setFormatter(formatter)
+    
+    # 핸들러 추가
+    logger.addHandler(file_handler)
+    logger.addHandler(console_handler)
+    
+    return logger
+
+# 로거 초기화
+app_logger = setup_logging()
 
 # 페이지 설정
 st.set_page_config(
@@ -22,11 +73,16 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+
+
 # GitHub Manager 초기화 (세션당 한 번만)
 if 'github_manager' not in st.session_state:
     try:
+        app_logger.info("GitHub Manager 초기화 시작")
         st.session_state.github_manager = GithubManager()
+        app_logger.info("GitHub Manager 초기화 완료")
     except Exception as e:
+        app_logger.error(f"GitHub 연결 실패: {e}", exc_info=True)
         st.error(f"GitHub 연결 실패: {e}")
         st.stop()
 
@@ -35,10 +91,16 @@ github_manager = st.session_state.github_manager
 
 def main_page():
     """메인 화면 (Newsroom)"""
+    app_logger.info("메인 페이지 접속")
     st.title("📰 나만의 IT 뉴스룸")
     
     # 접속자 통계 업데이트
-    update_visitor_stats(github_manager)
+    try:
+        app_logger.debug("접속자 통계 업데이트 시작")
+        update_visitor_stats(github_manager)
+        app_logger.debug("접속자 통계 업데이트 완료")
+    except Exception as e:
+        app_logger.error(f"접속자 통계 업데이트 실패: {e}", exc_info=True)
     
     # 날짜 선택
     today = get_today_date()
@@ -59,31 +121,73 @@ def main_page():
     if date_str in news_data:
         date_news = news_data[date_str]
         
-        # AI 브리핑 표시
+        # AI 브리핑 표시 - Top 3 뉴스
         st.markdown("---")
         st.subheader(f"🤖 {format_date_for_display(date_str)} IT 주요 뉴스 브리핑")
         
-        summary = date_news.get("summary", "브리핑이 없습니다.")
-        st.markdown(summary)
+        # Top 3 뉴스 데이터 확인
+        briefing_data = date_news.get("briefing", {})
+        top3_news = briefing_data.get("top3_news", [])
+        markdown_text = briefing_data.get("markdown", date_news.get("summary", ""))
         
-        # 주요 뉴스 리스트
-        st.markdown("---")
-        st.subheader("📋 주요 뉴스 리스트")
-        
-        news_list = date_news.get("news", [])
-        if news_list:
-            for i, news in enumerate(news_list, 1):
+        if top3_news:
+            # Top 3 뉴스를 카드 형태로 표시
+            for idx, news in enumerate(top3_news, 1):
                 with st.container():
-                    col1, col2 = st.columns([4, 1])
-                    with col1:
-                        st.markdown(f"**{i}. {news.get('title', '제목 없음')}**")
-                        if news.get('summary'):
-                            st.caption(news.get('summary', '')[:150] + "...")
-                    with col2:
-                        st.link_button("원문 보기", news.get('link', ''), use_container_width=True)
+                    # 카드 스타일
+                    st.markdown(f"""
+                    <div style="
+                        border: 2px solid #e0e0e0;
+                        border-radius: 10px;
+                        padding: 20px;
+                        margin: 15px 0;
+                        background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+                        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+                    ">
+                        <h3 style="color: #2c3e50; margin-top: 0;">🏆 Top {idx}: {news.get('title', '제목 없음')}</h3>
+                    </div>
+                    """, unsafe_allow_html=True)
+                    
+                    # 핵심 요약
+                    st.markdown("#### 📋 핵심 요약")
+                    st.info(news.get('summary', '요약 없음'))
+                    
+                    # 인사이트
+                    st.markdown("#### 💡 인사이트")
+                    st.markdown(news.get('insights', '인사이트 없음'))
+                    
+                    # 연관 기술 (배지 형태)
+                    related_tech = news.get('related_tech', [])
+                    if related_tech:
+                        st.markdown("#### 🔖 연관 기술")
+                        tech_badges = " ".join([f"`{tech}`" for tech in related_tech])
+                        st.markdown(tech_badges)
+                    
+                    # 원문 링크
+                    if news.get('link'):
+                        st.link_button("🔗 원문 보기", news.get('link'), use_container_width=True, type="primary")
+                    
                     st.markdown("---")
         else:
-            st.info("해당 날짜에 수집된 뉴스가 없습니다.")
+            # 기존 마크다운 형식 표시 (하위 호환성)
+            st.markdown(markdown_text)
+        
+        # 전체 뉴스 리스트 (접을 수 있게)
+        with st.expander("📋 전체 뉴스 리스트 보기", expanded=False):
+            news_list = date_news.get("news", [])
+            if news_list:
+                for i, news in enumerate(news_list, 1):
+                    with st.container():
+                        col1, col2 = st.columns([4, 1])
+                        with col1:
+                            st.markdown(f"**{i}. {news.get('title', '제목 없음')}**")
+                            if news.get('summary'):
+                                st.caption(news.get('summary', '')[:150] + "...")
+                        with col2:
+                            st.link_button("원문 보기", news.get('link', ''), use_container_width=True)
+                        st.markdown("---")
+            else:
+                st.info("해당 날짜에 수집된 뉴스가 없습니다.")
     else:
         st.info(f"{format_date_for_display(date_str)}에 수집된 뉴스 데이터가 없습니다.")
         st.caption("관리자 대시보드에서 뉴스 수집을 실행해주세요.")
@@ -214,17 +318,28 @@ def admin_dashboard():
         st.subheader("데이터 수집 및 분석")
         
         if st.button("🔄 뉴스 수집 및 분석 시작", type="primary", use_container_width=True):
+            log_start_time = datetime.now()
+            app_logger.info("=" * 80)
+            app_logger.info(f"뉴스 수집 및 분석 시작 - {log_start_time.strftime('%Y-%m-%d %H:%M:%S')}")
+            app_logger.info("=" * 80)
+            
             try:
                 # 피드 로드
+                app_logger.debug("RSS 피드 목록 로드 시작")
                 feeds_data = get_cached_data("feeds", github_manager, "feeds.json", {})
                 feeds = feeds_data.get("feeds", [])
+                app_logger.info(f"등록된 RSS 피드 수: {len(feeds)}")
                 
                 if not feeds:
+                    app_logger.warning("등록된 RSS 피드가 없습니다")
                     st.error("등록된 RSS 피드가 없습니다. RSS 피드 관리에서 피드를 추가해주세요.")
                     st.stop()
                 
                 enabled_feeds = [f for f in feeds if f.get("enabled", True)]
+                app_logger.info(f"활성화된 RSS 피드 수: {len(enabled_feeds)}")
+                
                 if not enabled_feeds:
+                    app_logger.warning("활성화된 RSS 피드가 없습니다")
                     st.error("활성화된 RSS 피드가 없습니다.")
                     st.stop()
                 
@@ -233,38 +348,85 @@ def admin_dashboard():
                 log_container = st.container()
                 
                 # 1. RSS 크롤링
+                app_logger.info("1/5 단계: RSS 피드에서 뉴스 수집 시작")
                 status_text.text("1/5 단계: RSS 피드에서 뉴스 수집 중...")
                 progress_bar.progress(0.2)
                 
                 all_news = collect_news_from_feeds(enabled_feeds, max_age_hours=24)
+                app_logger.info(f"✅ {len(all_news)}개의 뉴스 수집 완료")
                 log_container.info(f"✅ {len(all_news)}개의 뉴스 수집 완료")
                 
                 if not all_news:
+                    app_logger.warning("수집된 뉴스가 없습니다")
                     st.warning("수집된 뉴스가 없습니다.")
                     st.stop()
                 
                 # 2. 중복 제거
+                app_logger.info("2/5 단계: 중복 뉴스 제거 시작")
                 status_text.text("2/5 단계: 중복 뉴스 제거 중...")
                 progress_bar.progress(0.4)
                 
                 unique_news = remove_duplicate_news(all_news)
+                app_logger.info(f"✅ 중복 제거 완료: {len(unique_news)}개 뉴스 (제거: {len(all_news) - len(unique_news)}개)")
                 log_container.info(f"✅ 중복 제거 완료: {len(unique_news)}개 뉴스")
                 
-                # 3. Gemini 분석
-                status_text.text("3/5 단계: Gemini API로 뉴스 분석 중... (시간이 걸릴 수 있습니다)")
-                progress_bar.progress(0.5)
+                # 3. Top 3 뉴스 선별 및 분석 (모든 뉴스를 한 번에 분석)
+                app_logger.info(f"3/4 단계: 모든 뉴스를 묶어서 Top 3 선별 및 분석 시작 (총 {len(unique_news)}개)")
+                status_text.text("3/4 단계: 참신한 Top 3 뉴스 선별 및 분석 중... (시간이 걸릴 수 있습니다)")
+                progress_bar.progress(0.6)
                 
-                analyzed_news = analyze_news_batch(unique_news, batch_size=15)
-                log_container.info(f"✅ 뉴스 분석 완료: {len(analyzed_news)}개")
+                log_container.info(f"📊 {len(unique_news)}개의 뉴스를 한 번에 분석하여 Top 3를 선별합니다...")
                 
-                # 4. 일일 브리핑 생성
-                status_text.text("4/5 단계: 일일 브리핑 생성 중...")
-                progress_bar.progress(0.8)
+                briefing_result = generate_daily_briefing(unique_news)
+                top3_count = len(briefing_result.get('top3_news', []))
+                app_logger.info(f"✅ Top 3 뉴스 선별 및 분석 완료: {top3_count}개")
+                log_container.info(f"✅ Top 3 뉴스 선별 완료: {top3_count}개")
                 
-                briefing = generate_daily_briefing(analyzed_news)
+                # 분석 결과 표시
+                if top3_count > 0:
+                    st.markdown("---")
+                    st.subheader("📰 선별된 Top 3 뉴스")
+                    analysis_results_container = st.container()
+                    
+                    with analysis_results_container:
+                        for idx, news in enumerate(briefing_result.get('top3_news', []), 1):
+                            with st.expander(f"🏆 Top {idx}: {news.get('title', '제목 없음')}", expanded=(idx == 1)):
+                                col1, col2 = st.columns([1, 1])
+                                
+                                with col1:
+                                    st.markdown("**📋 핵심 요약**")
+                                    summary = news.get('summary', '요약 없음')
+                                    if summary:
+                                        st.info(summary)
+                                    else:
+                                        st.warning("요약 없음")
+                                
+                                with col2:
+                                    st.markdown("**💡 인사이트**")
+                                    insights = news.get('insights', '인사이트 없음')
+                                    if insights:
+                                        st.markdown(insights)
+                                    else:
+                                        st.info("인사이트 없음")
+                                
+                                # 연관 기술 배지
+                                related_tech = news.get('related_tech', [])
+                                if related_tech:
+                                    st.markdown("**🔖 연관 기술**")
+                                    tech_badges = " ".join([f"`{tech}`" for tech in related_tech])
+                                    st.markdown(tech_badges)
+                                
+                                if news.get('link'):
+                                    st.link_button("🔗 원문 보기", news.get('link'), use_container_width=True, type="primary")
+                                
+                                st.markdown("---")
                 
-                # 5. 데이터 저장
-                status_text.text("5/5 단계: GitHub에 데이터 저장 중...")
+                # 분석된 뉴스는 원본 뉴스 리스트 사용 (개별 분석 없음)
+                analyzed_news = unique_news
+                
+                # 4. 데이터 저장
+                app_logger.info("4/4 단계: GitHub에 데이터 저장 시작")
+                status_text.text("4/4 단계: GitHub에 데이터 저장 중...")
                 progress_bar.progress(0.9)
                 
                 today = get_today_date()
@@ -272,7 +434,8 @@ def admin_dashboard():
                 
                 news_data[today] = {
                     "date": today,
-                    "summary": briefing,
+                    "summary": briefing_result.get("markdown", ""),  # 하위 호환성 유지
+                    "briefing": briefing_result,  # Top 3 뉴스 정보 포함
                     "news": analyzed_news,
                     "collected_at": datetime.now().isoformat()
                 }
@@ -290,13 +453,38 @@ def admin_dashboard():
                 progress_bar.progress(1.0)
                 status_text.text("✅ 완료!")
                 
-                st.success(f"✅ 뉴스 수집 및 분석이 완료되었습니다! ({len(analyzed_news)}개 뉴스)")
+                # 최종 로그
+                log_end_time = datetime.now()
+                duration = (log_end_time - log_start_time).total_seconds()
+                app_logger.info(f"✅ 전체 프로세스 완료 (소요 시간: {duration:.1f}초)")
+                app_logger.info("=" * 80)
+                
+                st.success(f"✅ 뉴스 수집 및 분석이 완료되었습니다! ({len(analyzed_news)}개 뉴스, 소요 시간: {duration:.1f}초)")
+                
+                # 로그 파일 정보 표시
+                log_file_path = os.path.join("logs", "app.log")
+                if os.path.exists(log_file_path):
+                    st.info(f"📄 로그 파일: `{log_file_path}`")
+                    with open(log_file_path, "r", encoding="utf-8") as f:
+                        log_content = f.read()
+                        # 최근 로그만 표시 (마지막 100줄)
+                        recent_logs = "\n".join(log_content.split("\n")[-100:])
+                        st.download_button(
+                            label="📥 최근 로그 다운로드 (최근 100줄)",
+                            data=recent_logs,
+                            file_name=f"recent_logs_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log",
+                            mime="text/plain"
+                        )
+                
                 st.balloons()
                 
             except Exception as e:
-                st.error(f"❌ 오류 발생: {e}")
                 import traceback
-                st.code(traceback.format_exc())
+                error_trace = traceback.format_exc()
+                app_logger.error(f"뉴스 수집 및 분석 중 오류 발생: {e}", exc_info=True)
+                app_logger.error(f"상세 오류 추적:\n{error_trace}")
+                st.error(f"❌ 오류 발생: {e}")
+                st.code(error_trace)
 
 
 # 사이드바 네비게이션

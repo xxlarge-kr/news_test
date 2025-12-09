@@ -24,12 +24,27 @@ class GithubManager:
     
     def _check_rate_limit(self):
         """Rate Limit 확인 및 대기"""
-        rate_limit = self.github.get_rate_limit()
-        if rate_limit.core.remaining < 10:
-            reset_time = rate_limit.core.reset
-            wait_time = (reset_time - time.time()) + 1
-            if wait_time > 0:
-                time.sleep(wait_time)
+        try:
+            rate_limit = self.github.get_rate_limit()
+            # PyGithub 버전에 따라 다른 속성 구조 지원
+            if hasattr(rate_limit, 'core'):
+                remaining = rate_limit.core.remaining
+                reset_time = rate_limit.core.reset
+            elif hasattr(rate_limit, 'remaining'):
+                remaining = rate_limit.remaining
+                reset_time = getattr(rate_limit, 'reset', None)
+            else:
+                # Rate Limit 정보를 가져올 수 없으면 스킵
+                return
+            
+            if remaining and remaining < 10:
+                if reset_time:
+                    wait_time = (reset_time - time.time()) + 1
+                    if wait_time > 0:
+                        time.sleep(wait_time)
+        except Exception:
+            # Rate Limit 체크 실패해도 계속 진행
+            pass
     
     def read_json(self, file_path: str) -> Dict[str, Any]:
         """
@@ -126,12 +141,23 @@ class GithubManager:
                     else:
                         raise Exception(f"파일 업데이트 충돌 ({file_path}): 최대 재시도 횟수 초과")
                 elif e.status == 403:  # Rate Limit
-                    reset_time = self.github.get_rate_limit().core.reset
-                    wait_time = (reset_time - time.time()) + 1
-                    if wait_time > 0:
-                        time.sleep(wait_time)
-                        retry_count -= 1  # 재시도 카운트 유지
-                        continue
+                    try:
+                        rate_limit = self.github.get_rate_limit()
+                        if hasattr(rate_limit, 'core'):
+                            reset_time = rate_limit.core.reset
+                        elif hasattr(rate_limit, 'reset'):
+                            reset_time = rate_limit.reset
+                        else:
+                            reset_time = None
+                        
+                        if reset_time:
+                            wait_time = (reset_time - time.time()) + 1
+                            if wait_time > 0:
+                                time.sleep(wait_time)
+                                retry_count -= 1  # 재시도 카운트 유지
+                                continue
+                    except Exception:
+                        pass
                     raise Exception(f"GitHub API Rate Limit 초과")
                 else:
                     raise Exception(f"GitHub API 오류 ({file_path}): {e}")

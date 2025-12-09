@@ -1,0 +1,9 @@
+{
+  "feeds": [
+    {
+      "name": "bloter",
+      "url": "http://www.bloter.net/rss/allArticle.xml",
+      "enabled": true
+    }
+  ]
+}

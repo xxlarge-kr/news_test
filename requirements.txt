@@ -1,0 +1,6 @@
+streamlit>=1.28.0
+feedparser>=6.0.10
+google-generativeai>=0.3.0
+PyGithub>=1.59.0
+pandas>=2.0.0
+

@@ -14,6 +14,11 @@
       "name": "TechCrunch Korea",
       "url": "https://kr.techcrunch.com/feed/",
       "enabled": true
+    },
+    {
+      "name": "wired",
+      "url": "https://www.wired.com/feed/rss",
+      "enabled": true
     }
   ]
 }

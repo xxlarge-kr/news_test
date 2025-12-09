@@ -4,11 +4,6 @@
       "name": "bloter",
       "url": "http://www.bloter.net/rss/allArticle.xml",
       "enabled": true
-    },
-    {
-      "name": "wishket",
-      "url": "https://yozm.wishket.com/magazine/feed/",
-      "enabled": true
     }
   ]
 }

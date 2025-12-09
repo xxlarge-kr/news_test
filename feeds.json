@@ -1,11 +1,6 @@
 {
   "feeds": [
     {
-      "name": "TechCrunch Korea",
-      "url": "https://kr.techcrunch.com/feed/",
-      "enabled": true
-    },
-    {
       "name": "bloter",
       "url": "http://www.bloter.net/rss/allArticle.xml",
       "enabled": true

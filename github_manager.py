@@ -8,7 +8,10 @@ from typing import Dict, Any, Optional
 from github import Github
 from github.GithubException import GithubException
 import time
+import logging
 from config import get_github_token, get_repo_name
+
+logger = logging.getLogger(__name__)
 
 
 class GithubManager:
@@ -18,9 +21,36 @@ class GithubManager:
         """GitHub Manager 초기화"""
         self.token = get_github_token()
         self.repo_name = get_repo_name()
-        self.github = Github(self.token)
-        self.repo = self.github.get_repo(self.repo_name)
-        self._rate_limit_delay = 0.5  # Rate Limit 방지를 위한 지연 시간
+        
+        # 토큰 유효성 검증
+        if not self.token or self.token == "your_github_personal_access_token_here":
+            raise ValueError("GitHub Token이 설정되지 않았거나 유효하지 않습니다. .streamlit/secrets.toml 파일을 확인하세요.")
+        
+        try:
+            self.github = Github(self.token)
+            # 토큰 유효성 검증 (사용자 정보 가져오기 시도)
+            try:
+                user = self.github.get_user()
+                logger.info(f"GitHub 인증 성공: {user.login}")
+            except GithubException as e:
+                if e.status == 401:
+                    raise ValueError(f"GitHub Token이 유효하지 않거나 만료되었습니다. (401 Unauthorized)\n"
+                                   f"새로운 토큰을 생성하여 .streamlit/secrets.toml 파일에 업데이트하세요.\n"
+                                   f"토큰 생성: https://github.com/settings/tokens")
+                raise
+            
+            self.repo = self.github.get_repo(self.repo_name)
+            self._rate_limit_delay = 0.5  # Rate Limit 방지를 위한 지연 시간
+        except GithubException as e:
+            if e.status == 401:
+                raise ValueError(f"GitHub 인증 실패 (401): 토큰이 유효하지 않거나 만료되었습니다.\n"
+                               f"새로운 토큰을 생성하여 .streamlit/secrets.toml 파일에 업데이트하세요.\n"
+                               f"토큰 생성: https://github.com/settings/tokens")
+            elif e.status == 404:
+                raise ValueError(f"GitHub Repository를 찾을 수 없습니다: {self.repo_name}\n"
+                               f"Repository 이름이 올바른지 확인하세요. (형식: username/repo-name)")
+            else:
+                raise ValueError(f"GitHub API 오류 ({e.status}): {e}")
     
     def _check_rate_limit(self):
         """Rate Limit 확인 및 대기"""

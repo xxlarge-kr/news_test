@@ -24,6 +24,11 @@
       "name": "bloter",
       "url": "http://www.bloter.net/rss/allArticle.xml",
       "enabled": true
+    },
+    {
+      "name": "hada",
+      "url": "http://news.hada.io/rss/news",
+      "enabled": true
     }
   ]
 }
